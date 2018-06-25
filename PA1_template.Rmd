@@ -1,25 +1,145 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Peer Grade Assignment 1 Reproducible Research"
+author: "Ilham F. Nurdayat"
+output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, fig.align = 'center')
+```
 
-## Loading and preprocessing the data
+# **Overview**
 
+This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
 
+# **Report** 
 
-## What is mean total number of steps taken per day?
+## Loading and Preprocessing Data
 
+In this section shows how to preparing data for further analysis.
 
+### 1. Load the data
+```{r load}
+df <- read.csv("activity.csv", header =  TRUE)
+head(df)
+str(df) # checking data format
+```
 
-## What is the average daily activity pattern?
+### 2. Process/transform the data into suitable format
 
+Raw data shows that `date` variable is not in datetime format, so it should be converted using `as.Date` function. This data also have missing values that coded in `NA`. For further computation, this missing value should be exluded and using only complete observation data. 
+```{r preprocess}
+df$date <- as.Date(df$date, format = "%Y-%m-%d") # convert to datetime variable
+colSums(is.na(df)) # checking for number of missing value
+df.complete <- df[complete.cases(df),]
+colSums(is.na(df.complete)) # make sure there is no missing value left
+```
 
+## Mean Total Number of Steps Taken per Day
+### 1. Calculate the total number of steps per day
+```{r}
+total.steps <- tapply(df.complete$steps, df.complete$date, sum)
+head(total.steps)
 
-## Imputing missing values
+```
 
+### 2. Make a histogram ot the total number of steps taken each day
+```{r}
+hist(total.steps, 
+     main = "Histogram of Total Number of Steps", 
+     xlab = "Total number of steps each day")
+```
 
+At glance, the histogram shows that distribution of number of steps is approaching normal distribution. Large portion of data concentrated in middle and the rest distributed relatively even around center.
 
-## Are there differences in activity patterns between weekdays and weekends?
+### 3. Calculate and report the mean and median of the total number of steps taken per day
+```{r}
+mean(total.steps)
+median(total.steps)
+```
+
+Mean and median of the total number of steps taken per day is almost identical, this backed previous suggestion that the data is normally distributed.
+
+## Average Daily Activity Pattern
+### 1. Make time series plot of 5-minutes interval of average number of steps taken
+
+```{r}
+total.step.interval <- tapply(df.complete$steps, df.complete$interval, mean)
+library(lattice)
+xyplot(total.step.interval ~ unique(df.complete$interval), type = "l", 
+     main = "Time series plot of 5-minutes interval steps",
+     xlab = "5-minutes interval", ylab = "Average steps")
+```
+
+### 2. Maximum number of steps in 5-minutes interval
+```{r}
+subset(total.step.interval, total.step.interval == max(total.step.interval))
+```
+
+835 is when the maximum average number of steps in 5-minutes interval
+
+## Imputing Missing Value
+### 1. Calculate and report the total number of missing values in the dataset
+```{r}
+colSums(is.na(df))
+```
+There is 2304 missing value in the dataset.
+
+### 2. Devise a strategy for filling in all of the missing values in the dataset and create new dataset with the missing data filled in
+
+Since the missing value contain several dates, so the imputation will using mean of steps taken per 5-minutes interval.
+```{r}
+mean.steps.interval <- tapply(df.complete$steps, df.complete$interval, mean)
+# strategy to impute data based on its mean per 5-minutes interval
+dfcopy <- df
+for (i in unique(dfcopy$interval)) {
+  dfcopy[is.na(dfcopy$steps) & dfcopy$interval == i, 1] <- 
+    mean(dfcopy[dfcopy$interval == i, 1], na.rm = T) 
+}
+colSums(is.na(dfcopy))
+identical(dim(dfcopy), dim(df)) # check whether there is excluded value or not
+```
+
+### 3. Make a histogram of the total number of steps taken each day 
+```{r}
+total.step.complete <- tapply(dfcopy$steps, dfcopy$date, sum)
+hist(total.step.complete, 
+     main = "Histogram of Total Number of Steps Taken After Imputation",
+     xlab = "Total number of steps each day")
+```
+
+### 4.  Calculate and report the mean and median total number of steps taken per day
+
+```{r}
+mean(total.step.complete)
+median(total.step.complete)
+```
+
+The mean of number of steps taken per day after imputation is similar to before imputation. On the other hand, median has slightly different value compared to medain before imputation. After imputation, the median and mean of steps taken per day is equal.
+
+## Pattern in weekdays and weekend
+
+### 1. Create a new factor variable in the dataset with two levels
+```{r}
+weekdays <- c("Mon", "Tue", "Wed", "Thu", "Fri")
+dfcopy$weekday <- factor((weekdays(dfcopy$date, abbreviate = T) %in% weekdays), 
+                     levels = c(FALSE, TRUE), 
+                     labels = c("weekend", "weekdays"))
+```
+
+### 2. Make a panel plot containing a time series plot 
+```{r, message=FALSE, warning=FALSE}
+library(dplyr)
+average.interval.weekday <- dfcopy %>%
+  select(steps, interval, weekday) %>%
+  group_by(interval, weekday) %>%
+  summarise(avg = mean(steps))
+attach(average.interval.weekday)
+xyplot(avg ~ interval | weekday, type = "l", 
+       layout = c(1,2), 
+       xlab = "5-minute interval", ylab = "Average steps taken",
+       main = "Average Number of Steps Between Weekday and Weekend")
+detach(average.interval.weekday)
+```
